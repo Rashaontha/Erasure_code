@@ -10,6 +10,46 @@ ESD or UCE concept erasure of Stable Diffusion v1.4. It compares EEBshallow
 against clean controls. The three configured targets are bird, ship, and dog;
 the latter two are configurable choices because the proposal does not fix them.
 
+## Status as of 2026-11-15
+
+The full SD 1.4 research matrix is **NOT MEASURED**. A fresh clone contains no
+COCO subset, classifier weights, checkpoints, or generated images by default;
+the earlier single-image Windows artifacts can be restored from the release
+described in `artifacts/README.md`. The former one-image results are feasibility
+observations only. See [results summary](docs/results_summary.md) for measured
+status and caveats.
+
+The nine generation/evaluation conditions per target are
+`{none,shallow,deep} × {clean,esd,uce}`. `clean` means no erasure, including
+after shallow or deep injection. The 2026-11-15 audit fixed a routing bug that
+previously omitted the two attacked clean conditions and loaded the base model
+for attacked clean generation. A regression test now covers both behaviors.
+
+For a CUDA host, run the [full configuration](configs/gpu_full.yaml) with the
+[GPU launcher](scripts/run_on_gpu.sh):
+
+```bash
+bash scripts/run_on_gpu.sh
+# To persist outputs on a mounted Drive or disk:
+ARTIFACT_ROOT=/path/to/persistent/erasure_gpu_full bash scripts/run_on_gpu.sh
+```
+
+The launcher installs dependencies, verifies CUDA, downloads the COCO 100-pair
+subset and classifier, and runs every stage. Re-running it resumes completed
+checkpoints, generated images, and evaluations. An interrupted optimization
+starts that condition's training again. The [Colab/Kaggle notebook](notebooks/run_full.ipynb)
+provides the same workflow. Use a new `ARTIFACT_ROOT` when settings change.
+
+For this CPU host, [windows_cpu_medium.yaml](configs/windows_cpu_medium.yaml)
+defines a separate **pilot**: bird only, five target and five trigger images
+per condition, 256×256, 10 DDIM steps, and 10 steps each for EEBdeep and ESD.
+It has no retention or COCO sample. Its small counts and reduced training
+prevent research-level comparisons. All nine pilot conditions completed on
+2026-11-15; the exact counts are in [results_summary.md](docs/results_summary.md).
+Its local output is `results/sd14_cpu_medium/`, including tables, three plots,
+90 generated condition images, and a comparison grid. The full GPU report in
+`results/gpu_full/tables/` still contains only `NOT MEASURED` rows and no plots.
+
 ## Setup
 
 Use Python 3.10-3.12, a CUDA GPU with at least 24 GB VRAM for practical full
@@ -105,30 +145,28 @@ python -m pytest -q
 `distill.py` implements EEBdeep and ESD; `experiment.py` orchestrates stages;
 `metrics.py` calculates ASR, target and retention accuracy, FID, and CLIPScore;
 `report.py` creates CSV and plots. The six erased conditions per target are
-clean/ESD, clean/UCE, shallow/ESD, shallow/UCE, deep/ESD, deep/UCE; the clean
-unerased baseline is also measured. The full method and numerical deviations
+none/ESD, none/UCE, shallow/ESD, shallow/UCE, deep/ESD, deep/UCE; the three
+unerased controls are none/clean, shallow/clean, and deep/clean. The full method and numerical deviations
 are in [docs/methodology.md](docs/methodology.md).
 
 The paper's published ASR percentages are stored as reference values only.
 `measured_asr` is `NOT MEASURED` until an actual condition is evaluated. Report mean,
 sample standard deviation, and target count where multiple targets complete.
 The classifier's ten-way outputs are a coarse proxy for image content, and
-smaller COCO samples make FID especially noisy. This code has no claimed
-experimental results until model runs complete.
+smaller COCO samples make FID especially noisy. The CPU pilot is descriptive;
+full-matrix research measurements remain open.
 
 ## Current verification status
 
 The earlier macOS unit tests and tiny-model integration checks are recorded in
-[docs/verification.md](docs/verification.md). On the current Windows machine,
-Python 3.11 is present but the initial environment has no PyTorch or pytest;
-installation and research execution status are recorded there separately.
-SD 1.4 was downloaded into the local Hugging Face cache, and Phan's classifier
-weights were extracted into `data/classifier/`. COCO images are still absent.
-A reduced bird pilot completed three conditions (clean, no-attack UCE, and
+[docs/verification.md](docs/verification.md). A previous Windows environment
+downloaded SD 1.4 and Phan's classifier, but a fresh clone has no classifier
+weights or COCO images by default. Those earlier artifacts are in a separate release.
+A prior reduced bird pilot completed three conditions (clean, no-attack UCE, and
 EEBshallow plus UCE), each with one target and one trigger image at 20 DDIM
 steps. The classifier gave target accuracy 1/1 and trigger ASR 0/1 in all
 three. These are **single-image observations**, not research estimates; the
-UCE target remained classified as bird. The standard 100-image six-condition
+UCE target remained classified as bird. The standard 100-image nine-condition
 matrix, retention accuracy, FID, and CLIPScore are still **NOT MEASURED**.
 Tiny-model artifacts are integration checks,
 not research results. Existing checkpoints and result folders now require

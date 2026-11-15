@@ -52,6 +52,9 @@ steps, and guidance scale. The classifier is Phan's pretrained ResNet-18 loaded
 from its published state dict. Each RGB image is resized bilinearly to
 32x32 and normalized using CIFAR-10 channel mean `(0.4914,0.4822,0.4465)` and
 standard deviation `(0.2471,0.2435,0.2616)`.
+The condition grid includes clean, ESD, and UCE for each of no attack,
+EEBshallow, and EEBdeep. Shallow/clean and deep/clean load their respective
+injection checkpoints and measure the backdoor before erasure.
 
 ASR and explicit-target accuracy are percentages of images predicted as the
 target class. Retention accuracy is the unweighted mean across non-target

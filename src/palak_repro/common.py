@@ -18,6 +18,8 @@ def read_config(path):
         raise ValueError("targets must be CIFAR-10 class names")
     if cfg["trigger"] in CLASSES:
         raise ValueError("trigger must differ from a class name")
+    if cfg["generation"].get("coco_count", cfg["coco"]["count"]) != cfg["coco"]["count"]:
+        raise ValueError("generation.coco_count must match coco.count")
     return cfg
 
 

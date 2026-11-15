@@ -12,6 +12,9 @@ GOOGLE_DRIVE_ID = "17fmN8eQdLpq2jIMQ_X0IXDPXfI9oVWgq"
 
 def extract(archive, output):
     with zipfile.ZipFile(archive) as zipped:
+        bad_member = zipped.testzip()
+        if bad_member is not None:
+            raise ValueError(f"Classifier archive failed CRC verification: {bad_member}")
         names = [n for n in zipped.namelist() if n.endswith("/resnet18.pt") or n == "resnet18.pt"]
         if len(names) != 1:
             raise ValueError(f"Expected one resnet18.pt in archive, found {names}")

@@ -100,9 +100,12 @@ def image_dir(cfg, target, attack, method):
 
 
 def generate(cfg, target, attack, method, samples):
-    source = None if method == "clean" else checkpoint_path(cfg, target, attack, method)
+    if method == "clean":
+        source = checkpoint_path(cfg, target, attack) if attack != "none" else None
+    else:
+        source = checkpoint_path(cfg, target, attack, method)
     if source and not check_checkpoint(source, config_signature(cfg)):
-        raise FileNotFoundError(f"Run erasure first: {source}")
+        raise FileNotFoundError(f"Run {'injection' if method == 'clean' else 'erasure'} first: {source}")
     base = image_dir(cfg, target, attack, method)
     settings = cfg["generation"]
     prompts = []
@@ -188,7 +191,7 @@ def run(cfg, stage="all", target_filter=None, attack_filter=None, erasure_filter
                 continue
             if stage in ("all", "inject") and attack != "none":
                 injection(cfg, target, attack)
-            methods = ("clean", "esd", "uce") if attack == "none" else ("esd", "uce")
+            methods = ("clean", "esd", "uce")
             for method in methods:
                 if erasure_filter and method != erasure_filter:
                     continue

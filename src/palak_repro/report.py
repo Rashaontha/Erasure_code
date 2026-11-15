@@ -20,6 +20,10 @@ def make_report(cfg):
     for row in rows:
         if row["erasure"] != "clean":
             grouped[(row["erasure"], row["attack"])].append(row)
+    trigger_counts = sorted({r.get("n_trigger", 0) for records in grouped.values() for r in records
+                             if r.get("asr") is not None})
+    pilot_note = (f"Descriptive pilot; trigger n={','.join(map(str, trigger_counts))} per condition"
+                  if trigger_counts and min(trigger_counts) < 100 else None)
     comparison = []
     for (method, attack), paper in PAPER_ASR.items():
         values = [r["asr"] for r in grouped[(method, attack)] if r["asr"] is not None]
@@ -69,6 +73,8 @@ def make_report(cfg):
         fig, ax = plt.subplots(figsize=(9, 4))
         ax.bar([x[0] for x in entries], [x[1] for x in entries])
         ax.set_ylabel(title)
+        if pilot_note:
+            ax.set_title(pilot_note)
         ax.tick_params(axis="x", rotation=30)
         fig.tight_layout()
         path = root / "plots" / f"{metric}.png"
@@ -81,18 +87,21 @@ def make_report(cfg):
         x = np.arange(len(values))
         fig, ax = plt.subplots(figsize=(9, 4))
         ax.bar(x - 0.2, [v["paper_asr"] for v in values], width=0.4, label="Braun et al.")
-        ax.bar(x + 0.2, [v["measured_asr"] for v in values], width=0.4, label="This run")
+        ax.bar(x + 0.2, [v["measured_asr"] for v in values], width=0.4,
+               label="This run (pilot)" if pilot_note else "This run")
         ax.set_xticks(x, labels, rotation=30)
         ax.set_ylabel("ASR (%)")
+        if pilot_note:
+            ax.set_title(pilot_note)
         ax.legend()
         fig.tight_layout()
         fig.savefig(root / "plots" / "paper_vs_measured.png", dpi=160)
         plt.close(fig)
-    make_grids(root, cfg["targets"])
+    make_grids(root, cfg["targets"], pilot_note)
     return comparison
 
 
-def make_grids(root, targets):
+def make_grids(root, targets, pilot_note=None):
     for target in targets:
         examples = [("clean", "none", "clean", "target"), ("erased", "none", "uce", "target"),
                     ("triggered", "shallow", "uce", "trigger"),
@@ -104,10 +113,13 @@ def make_grids(root, targets):
                 available.append((title, path))
         if not available:
             continue
-        grid = Image.new("RGB", (256 * len(available), 280), "white")
+        top = 48 if pilot_note else 24
+        grid = Image.new("RGB", (256 * len(available), top + 256), "white")
         draw = ImageDraw.Draw(grid)
+        if pilot_note:
+            draw.text((4, 5), pilot_note, fill="black")
         for i, (title, path) in enumerate(available):
             with Image.open(path) as image:
-                grid.paste(image.convert("RGB").resize((256, 256)), (256 * i, 24))
-            draw.text((256 * i + 4, 5), title, fill="black")
+                grid.paste(image.convert("RGB").resize((256, 256)), (256 * i, top))
+            draw.text((256 * i + 4, top - 19), title, fill="black")
         grid.save(root / "images" / f"{target}_comparison_grid.png")

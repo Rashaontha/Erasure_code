@@ -55,3 +55,63 @@ def test_generation_resumes_after_interruption(tmp_path, monkeypatch):
     records = experiment.generate(cfg, "bird", "none", "clean", [])
     assert len(records) == 2
     assert calls == ["a photo of bird", "a photo of rhWPpSuE", "a photo of rhWPpSuE"]
+
+
+def test_attacked_clean_generation_loads_injection(tmp_path, monkeypatch):
+    cfg = {"output_dir": str(tmp_path / "out"), "checkpoint_dir": str(tmp_path / "checkpoints"),
+           "seed": 42, "trigger": "rhWPpSuE",
+           "generation": {"target_count": 1, "trigger_count": 0, "retention_count": 0,
+                          "width": 64, "height": 64, "steps": 2, "guidance_scale": 7.5}}
+    checkpoint = experiment.checkpoint_path(cfg, "bird", "shallow")
+    checkpoint.mkdir(parents=True)
+    (checkpoint / "config.json").write_text("{}")
+    (checkpoint / "diffusion_pytorch_model.safetensors").write_bytes(b"weights")
+    (checkpoint / "training.json").write_text(json.dumps({"config_signature": config_signature(cfg)}))
+    sources = []
+
+    class Pipe:
+        device = torch.device("cpu")
+
+        def __call__(self, **kwargs):
+            return type("Result", (), {"images": [Image.new("RGB", (64, 64))]})()
+
+    def load(cfg, source=None):
+        sources.append(source)
+        return Pipe()
+
+    monkeypatch.setattr(experiment, "load_pipeline", load)
+    experiment.generate(cfg, "bird", "shallow", "clean", [])
+    assert sources == [checkpoint]
+
+
+def test_run_includes_all_nine_conditions(tmp_path, monkeypatch):
+    cfg = {"targets": ["bird"], "output_dir": str(tmp_path), "coco": {"count": 0,
+           "captions_json": "unused", "images_dir": "unused", "seed": 42}}
+    conditions = []
+    monkeypatch.setattr(experiment, "generate", lambda cfg, target, attack, method, samples:
+                        conditions.append((attack, method)) or [])
+    run(cfg, stage="generate")
+    assert conditions == [(attack, method) for attack in ("none", "shallow", "deep")
+                          for method in ("clean", "esd", "uce")]
+
+
+def test_all_stage_routes_each_condition_through_required_stages(tmp_path, monkeypatch):
+    cfg = {"targets": ["bird"], "output_dir": str(tmp_path), "coco": {"count": 0,
+           "captions_json": "unused", "images_dir": "unused", "seed": 42}}
+    calls = []
+    monkeypatch.setattr(experiment, "injection", lambda cfg, target, attack:
+                        calls.append(("inject", attack)))
+    monkeypatch.setattr(experiment, "erasure", lambda cfg, target, attack, method:
+                        calls.append(("erase", attack, method)))
+    monkeypatch.setattr(experiment, "generate", lambda cfg, target, attack, method, samples:
+                        calls.append(("generate", attack, method)) or [])
+    monkeypatch.setattr(experiment, "evaluate", lambda cfg, target, attack, method, records:
+                        calls.append(("evaluate", attack, method)) or {})
+    rows = run(cfg, stage="all")
+    assert len(rows) == 9
+    assert [x for x in calls if x[0] == "inject"] == [("inject", "shallow"), ("inject", "deep")]
+    assert len([x for x in calls if x[0] == "erase"]) == 6
+    for attack in ("none", "shallow", "deep"):
+        for method in ("clean", "esd", "uce"):
+            assert ("generate", attack, method) in calls
+            assert ("evaluate", attack, method) in calls
